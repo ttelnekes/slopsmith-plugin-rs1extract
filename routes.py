@@ -1,6 +1,7 @@
 """RS1 Song Extractor plugin — split RS1 compatibility packs into individual CDLCs."""
 
 import asyncio
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -10,6 +11,19 @@ from fastapi import WebSocket, WebSocketDisconnect
 _get_dlc_dir = None
 _extract_meta = None
 _meta_db = None
+_extractor_mod = None
+
+
+def _extractor():
+    """Load this plugin's extractor.py with a unique module name to avoid conflicts."""
+    global _extractor_mod
+    if _extractor_mod is None:
+        spec = importlib.util.spec_from_file_location(
+            "rs1_extract_extractor", Path(__file__).parent / "extractor.py"
+        )
+        _extractor_mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(_extractor_mod)
+    return _extractor_mod
 
 
 def _find_rs_dir(dlc_dir):
@@ -111,7 +125,10 @@ def setup(app, context):
 
         def _do_extract():
             try:
-                from extractor import PsarcReader, process_pack, PACKS
+                _ext = _extractor()
+                PsarcReader = _ext.PsarcReader
+                process_pack = _ext.process_pack
+                PACKS = _ext.PACKS
 
                 # Override paths
                 songs_reader = None
@@ -172,10 +189,14 @@ def setup(app, context):
 
         def _extract_with_progress(pack_name, config, songs_reader, output_dir, queue):
             """Wrapper around process_pack that reports progress."""
-            from extractor import (
-                PsarcReader, parse_bnk_wem_id, get_song_info, sanitize_filename,
-                build_hsan, build_aggregate_graph, update_xblock,
-            )
+            _ext = _extractor()
+            PsarcReader = _ext.PsarcReader
+            parse_bnk_wem_id = _ext.parse_bnk_wem_id
+            get_song_info = _ext.get_song_info
+            sanitize_filename = _ext.sanitize_filename
+            build_hsan = _ext.build_hsan
+            build_aggregate_graph = _ext.build_aggregate_graph
+            update_xblock = _ext.update_xblock
             from patcher import pack_psarc
             import tempfile
 
